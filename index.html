@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Boletería</title>
+<style>
+  html,body{height:100%;margin:0;background:#000;color:#fff;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;}
+  .wrap{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;}
+  #scary{width:90vmin;max-width:900px;display:none;transform:scale(0.7);transition:transform .6s ease,opacity .6s ease;opacity:0;}
+  #scary.show{display:block;opacity:1;transform:scale(1);}
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(0deg, rgba(0,0,0,0.65), rgba(0,0,0,0.4));backdrop-filter: blur(2px);}
+  .btn{background:#ff0044;border:none;padding:18px 28px;border-radius:12px;color:#fff;font-weight:700;font-size:18px;cursor:pointer;box-shadow:0 8px 30px rgba(255,0,68,0.12);}
+  .msg{margin-top:14px;opacity:0.9;font-size:14px}
+  /* scary zoom animation */
+  @keyframes shake {
+    0% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+    10% { transform: translate(calc(-50% + 6px), calc(-50% + -4px)) scale(1.02) rotate(-1deg); }
+    20% { transform: translate(calc(-50% + -8px), calc(-50% + 6px)) scale(1.03) rotate(2deg); }
+    30% { transform: translate(calc(-50% + 4px), calc(-50% + -8px)) scale(1.02) rotate(-2deg); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+  }
+  .shake { animation: shake .8s ease-in-out both; }
+  /* hide until triggered */
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Innocent-looking header that can mislead the visitor -->
+  <h1 style="margin:0 0 10px 0;font-size:28px;">Boletería — SOFA 2025</h1>
+  <p style="margin:0 0 24px 0;opacity:.8">Compra tu entrada aquí</p>
+
+  <!-- The "scary face" as inline SVG so no external images are required -->
+  <div id="scary" aria-hidden="true">
+    <svg viewBox="0 0 600 600" width="100%" height="100%" role="img" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="g1" cx="40%" cy="35%" r="60%">
+          <stop offset="0%" stop-color="#fff"/>
+          <stop offset="30%" stop-color="#f6d8d8"/>
+          <stop offset="70%" stop-color="#1b0000"/>
+        </radialGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="#000"></rect>
+      <g transform="translate(50,30) scale(0.85)">
+        <ellipse cx="250" cy="270" rx="200" ry="240" fill="url(#g1)" />
+        <!-- dark eyes -->
+        <ellipse cx="180" cy="210" rx="40" ry="60" fill="#000"/>
+        <ellipse cx="320" cy="210" rx="40" ry="60" fill="#000"/>
+        <!-- mouth -->
+        <path d="M150 360 C 220 460, 330 460, 400 360 C 360 430, 240 430, 150 360 Z" fill="#000"/>
+        <!-- teeth -->
+        <g fill="#fff" transform="translate(160,330)">
+          <rect x="0" y="10" width="26" height="26" rx="4"/>
+          <rect x="34" y="6" width="24" height="28" rx="4"/>
+          <rect x="68" y="2" width="24" height="32" rx="4"/>
+          <rect x="102" y="6" width="24" height="28" rx="4"/>
+          <rect x="136" y="10" width="26" height="26" rx="4"/>
+        </g>
+        <!-- subtle red veins -->
+        <path d="M120 110 C 150 120, 130 170, 160 190" stroke="#4b0000" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.8"/>
+        <path d="M380 120 C 350 140, 370 190, 340 210" stroke="#4b0000" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.8"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Overlay with a button so the user can choose to "Enter"/"Continue" (also helps with autoplay policy) -->
+  <div id="overlay" class="overlay hidden" role="dialog" aria-label="Confirmar entrada">
+    <div style="text-align:center;">
+      <button id="enterBtn" class="btn">Entrar a Boletería</button>
+      <div class="msg">Haz clic para continuar</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/*
+  Behavior:
+  - Attempt to play the scream sound automatically after a brief delay.
+  - If the browser blocks autoplay, the overlay with "Entrar" button will appear.
+  - The sound is synthesized with WebAudio (no external files).
+  - When triggered, the scary SVG is shown and animated briefly while the sound plays.
+  - After the "scare" finishes, you can redirect to a real boleteria page or show ticket UI.
+*/
+
+/* Synthesized scream using WebAudio — creates noise + pitch sweep for a short 'jump-scare' */
+function playScream(audioCtx, when=0) {
+  const duration = 1.2; // seconds
+  // create noise buffer
+  const bufferSize = audioCtx.sampleRate * duration;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i=0;i<bufferSize;i++){
+    // white noise shaped by an envelope
+    data[i] = (Math.random()*2-1) * Math.exp(-3 * (i / bufferSize));
+  }
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+
+  // create a bandpass filter to make it scream-like
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(1200, audioCtx.currentTime + when);
+  bp.Q.value = 1.6;
+  // pitch sweep
+  bp.frequency.exponentialRampToValueAtTime(350, audioCtx.currentTime + when + duration*0.8);
+
+  // gain envelope
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.0001, audioCtx.currentTime + when);
+  gain.gain.exponentialRampToValueAtTime(1.0, audioCtx.currentTime + when + 0.05); // sudden attack
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + when + duration);
+
+  // combine and play
+  noise.connect(bp);
+  bp.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(audioCtx.currentTime + when);
+  noise.stop(audioCtx.currentTime + when + duration + 0.05);
+}
+
+/* helper to show the scary face and animate */
+function triggerScare() {
+  const s = document.getElementById('scary');
+  s.classList.add('show','shake');
+  // remove shake class after animation so it can rerun if needed
+  setTimeout(()=>s.classList.remove('shake'),900);
+}
+
+/* Try autoplay after short delay */
+let audioCtx;
+function tryAutoplayThenFallback(){
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch(e) {
+    audioCtx = null;
+  }
+  // attempt to play after 900ms
+  setTimeout(async () => {
+    if (!audioCtx) {
+      // no audio support — just show scary image
+      triggerScare();
+      return;
+    }
+    try {
+      // some browsers require resume() after user gesture; try resume
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+      // attempt to play
+      playScream(audioCtx, 0);
+      triggerScare();
+      // after scare, optionally redirect or reveal ticket UI — we keep it on the page
+    } catch (err) {
+      // autoplay blocked — show overlay requiring click
+      const overlay = document.getElementById('overlay');
+      overlay.classList.remove('hidden');
+      const btn = document.getElementById('enterBtn');
+      btn.addEventListener('click', async function() {
+        overlay.classList.add('hidden');
+        try {
+          if (audioCtx.state === 'suspended') await audioCtx.resume();
+          playScream(audioCtx, 0);
+        } catch(e) {
+          // ignore
+        }
+        triggerScare();
+      });
+    }
+  }, 900);
+}
+
+/* Immediately run */
+tryAutoplayThenFallback();
+</script>
+</body>
+</html>
